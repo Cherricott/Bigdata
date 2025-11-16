@@ -1,6 +1,6 @@
 import os
 
-root = r"C:\Users\ADMIN\Downloads\Bigdata"   # change ONLY if your CSVs are deeper
+root = r"data"   # change ONLY if your CSVs are deeper
 
 print("Current working directory:", os.getcwd())
 print("Scanning recursively under:", root)

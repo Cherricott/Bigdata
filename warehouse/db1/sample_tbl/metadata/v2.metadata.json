@@ -1,0 +1,86 @@
+{
+  "format-version" : 2,
+  "table-uuid" : "e2a102d6-06d3-40ae-8489-f1d003b9fb1a",
+  "location" : "warehouse/db1/sample_tbl",
+  "last-sequence-number" : 1,
+  "last-updated-ms" : 1763005629221,
+  "last-column-id" : 3,
+  "current-schema-id" : 0,
+  "schemas" : [ {
+    "type" : "struct",
+    "schema-id" : 0,
+    "fields" : [ {
+      "id" : 1,
+      "name" : "id",
+      "required" : false,
+      "type" : "int"
+    }, {
+      "id" : 2,
+      "name" : "name",
+      "required" : false,
+      "type" : "string"
+    }, {
+      "id" : 3,
+      "name" : "temp",
+      "required" : false,
+      "type" : "double"
+    } ]
+  } ],
+  "default-spec-id" : 0,
+  "partition-specs" : [ {
+    "spec-id" : 0,
+    "fields" : [ ]
+  } ],
+  "last-partition-id" : 999,
+  "default-sort-order-id" : 0,
+  "sort-orders" : [ {
+    "order-id" : 0,
+    "fields" : [ ]
+  } ],
+  "properties" : {
+    "owner" : "hieupc",
+    "write.parquet.compression-codec" : "zstd"
+  },
+  "current-snapshot-id" : 864135123038654598,
+  "refs" : {
+    "main" : {
+      "snapshot-id" : 864135123038654598,
+      "type" : "branch"
+    }
+  },
+  "snapshots" : [ {
+    "sequence-number" : 1,
+    "snapshot-id" : 864135123038654598,
+    "timestamp-ms" : 1763005629221,
+    "summary" : {
+      "operation" : "append",
+      "spark.app.id" : "local-1763005623281",
+      "added-data-files" : "3",
+      "added-records" : "3",
+      "added-files-size" : "2705",
+      "changed-partition-count" : "1",
+      "total-records" : "3",
+      "total-files-size" : "2705",
+      "total-data-files" : "3",
+      "total-delete-files" : "0",
+      "total-position-deletes" : "0",
+      "total-equality-deletes" : "0",
+      "engine-version" : "3.5.3",
+      "app-id" : "local-1763005623281",
+      "engine-name" : "spark",
+      "iceberg-version" : "Apache Iceberg 1.6.1 (commit 8e9d59d299be42b0bca9461457cd1e95dbaad086)"
+    },
+    "manifest-list" : "warehouse/db1/sample_tbl/metadata/snap-864135123038654598-1-134cf13b-cb5d-4dfd-a73b-3be6213188d7.avro",
+    "schema-id" : 0
+  } ],
+  "statistics" : [ ],
+  "partition-statistics" : [ ],
+  "snapshot-log" : [ {
+    "timestamp-ms" : 1763005629221,
+    "snapshot-id" : 864135123038654598
+  } ],
+  "metadata-log" : [ {
+    "timestamp-ms" : 1763005626494,
+    "metadata-file" : "warehouse/db1/sample_tbl/metadata/v1.metadata.json"
+  } ]
+}
