@@ -1,0 +1,7 @@
+checkpoint_parquet/
+checkpoint/
+spark-warehouse/
+warehouse/
+.ivy2/
+.env
+.venv
