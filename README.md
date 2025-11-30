@@ -33,6 +33,9 @@ Goal: Load the historical CSV data into the history_flights Iceberg table. You o
 
     docker compose exec spark-app python batch_etl.py
 
+
+Note: currently batch_etl.py works for small ammount of data, for large ammount of data, try batch_etl_large.py
+
 # Run the Speed Layer (Real-Time)
 
 Next run this command to simulate "live" data stream (run it in its own terminal and keep the terminal running):
@@ -42,10 +45,6 @@ Next run this command to simulate "live" data stream (run it in its own terminal
 In an new terminal, run this command to get the data into warehouse:
 
     docker compose exec spark-app python sparkstreaming.py
-
-Run this in a new terminal to see: Every 5 seconds, the "Total Flights" number will jump up, and the "Worst Airline" might change. This confirms your pipeline is end-to-end.
-
-    docker compose exec spark-app python read_iceberg.py
 
 Check Data Flow: Go to http://localhost:8888 -> Topics -> flights_live -> Messages. (You should see data).
 
@@ -63,7 +62,7 @@ Go to the terminal for producer.py and press Ctrl + C
 
 Then to the terminal for sparkstreaming.py and press Ctrl + C
 
-Do the same for read_iceberg.py and dashboard.py
+Do the same for dashboard.py
 
 Finally open a new terminal and run
 
