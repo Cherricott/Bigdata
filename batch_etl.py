@@ -27,11 +27,10 @@ for root, dirs, files in os.walk(input_path):
         if file.endswith(".csv"):
             print(f"   -> Found: {os.path.join(root, file)}")
             csv_count += 1
-            if csv_count >= 3: break # Stop printing after 3 to save space
+            if csv_count >= 3: break 
 
 if csv_count == 0:
     print("❌ ERROR: No CSV files found! Check your 'data' folder structure.")
-    print("   Make sure you moved 'parquet/raw_csvs' files into 'data/YEAR/'.")
     sys.exit(1)
 else:
     print(f"✅ Found CSV files. Proceeding with Spark...\n")
@@ -55,25 +54,26 @@ spark.sparkContext.setLogLevel("WARN")
 # 3️⃣ LOAD & CLEAN RAW DATA
 # =========================================
 try:
-    # UPDATED: Added 'recursiveFileLookup' to find files inside Year folders
+    # Read raw CSVs (Handling nested folders)
     raw_df = spark.read \
         .option("header", "true") \
         .option("recursiveFileLookup", "true") \
         .csv(input_path)
     
-    # TRANSFORMATION LOGIC
+    # TRANSFORMATION LOGIC (7 Columns)
     clean_df = raw_df.select(
-        # 1. Parse Date Format: "1/1/2020 12:00:00 AM" -> DateType
+        # 1. Date
         to_date(to_timestamp(col("FL_DATE"), "M/d/y h:m:s a")).alias("FL_DATE"),
         
-        # 2. Keep IDs
+        # 2. Dimensions
         col("OP_UNIQUE_CARRIER"),
         col("ORIGIN"),
         col("DEST"),
         
-        # 3. Cast Delays to Numbers
+        # 3. Metrics (Delays + Cancelled)
         col("DEP_DELAY").cast(DoubleType()),
-        col("ARR_DELAY").cast(DoubleType())
+        col("ARR_DELAY").cast(DoubleType()),
+        col("CANCELLED").cast(DoubleType())  # <--- Added this 7th column
     )
 
     print("📊 Schema Validation:")
@@ -84,6 +84,7 @@ try:
     # =========================================
     print("💾 Writing to Iceberg Table: local.flight_stream.history_flights...")
     
+    # We use createOrReplace because this is a full reload of history
     clean_df.writeTo("local.flight_stream.history_flights") \
             .createOrReplace()
             

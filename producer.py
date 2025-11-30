@@ -66,7 +66,9 @@ try:
             "ORIGIN": random.choice(airports),
             "DEST": random.choice(airports),
             "DEP_DELAY": round(random.uniform(-10, 120), 2),
-            "ARR_DELAY": round(random.uniform(-10, 150), 2)
+            "ARR_DELAY": round(random.uniform(-10, 150), 2),
+            # ADD THIS: 5% chance of being cancelled (1.0), otherwise 0.0
+            "CANCELLED": 1.0 if random.random() < 0.05 else 0.0
         }
 
         producer.send("flights_live", value=data)

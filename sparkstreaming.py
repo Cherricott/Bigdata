@@ -71,7 +71,8 @@ schema = StructType([
     StructField("ORIGIN", StringType()),
     StructField("DEST", StringType()),
     StructField("DEP_DELAY", DoubleType()),
-    StructField("ARR_DELAY", DoubleType())
+    StructField("ARR_DELAY", DoubleType()),
+    StructField("CANCELLED", DoubleType())  # <--- ADD THIS
 ])
 
 # Read Stream
@@ -107,7 +108,8 @@ CREATE TABLE IF NOT EXISTS local.flight_stream.realtime_flights (
     ORIGIN STRING,
     DEST STRING,
     DEP_DELAY DOUBLE,
-    ARR_DELAY DOUBLE
+    ARR_DELAY DOUBLE,
+    CANCELLED DOUBLE  -- <--- ADD THIS
 )
 USING ICEBERG
 """)
