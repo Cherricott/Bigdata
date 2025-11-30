@@ -3,3 +3,6 @@ pandas
 pyarrow
 kafka-python
 fastparquet
+streamlit
+matplotlib
+setuptools

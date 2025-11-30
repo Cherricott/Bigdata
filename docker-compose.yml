@@ -7,12 +7,13 @@ services:
       - .:/app
       - ./warehouse:/app/warehouse
       - ./checkpoint_parquet:/app/checkpoint_parquet
-      - ./parquet:/app/parquet
-      # Hide local venv to prevent conflicts
+      - ./data:/app/data
       - /app/.venv
     environment:
       - SPARK_LOCAL_IP=127.0.0.1
       - HOME=/app
+    ports:
+      - "8501:8501"
     depends_on:
       - kafka
 

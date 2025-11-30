@@ -1,95 +1,3 @@
-# import os
-# from pyspark.sql import SparkSession
-# from pyspark.sql.functions import from_json, col, to_date
-# from pyspark.sql.types import *
-
-# # ========== WINDOWS FIX (IMPORTANT) ==========
-# os.environ["HADOOP_HOME"] = "C:\\hadoop"
-# os.environ["PATH"] += ";" + os.path.join(os.environ["HADOOP_HOME"], "bin")
-
-# # ========== ICEBERG WAREHOUSE ==========
-# warehouse_path = "C:/Users/ADMIN/Downloads/Bigdata-test_branch/Bigdata-test_branch/warehouse"
-
-# # ========== CREATE SPARK SESSION ==========
-# spark = (
-#     SparkSession.builder
-#     .appName("IcebergStreaming")
-#     .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
-#     .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
-#     .config("spark.sql.catalog.local.type", "hadoop")
-#     .config("spark.sql.catalog.local.warehouse", warehouse_path)
-#     .config(
-#         "spark.jars.packages",
-#         "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,"
-#         "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.2"
-#     )
-#     .getOrCreate()
-# )
-
-# spark.sparkContext.setLogLevel("WARN")
-
-# print("\n✅ Spark + Iceberg + Kafka initialized successfully")
-
-# # ========== KAFKA SCHEMA ==========
-# schema = StructType([
-#     StructField("FL_DATE", StringType()),
-#     StructField("OP_UNIQUE_CARRIER", StringType()),
-#     StructField("ORIGIN", StringType()),
-#     StructField("DEST", StringType()),
-#     StructField("DEP_DELAY", DoubleType()),
-#     StructField("ARR_DELAY", DoubleType())
-# ])
-
-# # ========== READ FROM KAFKA ==========
-# kafka_df = (
-#     spark.readStream
-#     .format("kafka")
-#     .option("kafka.bootstrap.servers", "localhost:9092")
-#     .option("subscribe", "flights_live")
-#     .option("startingOffsets", "latest")
-#     .load()
-# )
-
-# # ========== PARSE JSON ==========
-# parsed_df = (
-#     kafka_df
-#     .selectExpr("CAST(value AS STRING)")
-#     .select(from_json(col("value"), schema).alias("data"))
-#     .select("data.*")
-#     .withColumn("FL_DATE", to_date(col("FL_DATE")))
-# )
-
-# print("✅ Kafka stream connected & JSON parsed")
-
-# # ========== CREATE ICEBERG TABLE ==========
-# spark.sql("""
-# CREATE TABLE IF NOT EXISTS local.flight_stream.realtime_flights (
-#     FL_DATE DATE,
-#     OP_UNIQUE_CARRIER STRING,
-#     ORIGIN STRING,
-#     DEST STRING,
-#     DEP_DELAY DOUBLE,
-#     ARR_DELAY DOUBLE
-# )
-# USING ICEBERG
-# """)
-
-# print("✅ Iceberg table ready: local.flight_stream.realtime_flights")
-
-# # ========== STREAM WRITE TO ICEBERG ==========
-# query = (
-#     parsed_df
-#     .writeStream
-#     .outputMode("append")
-#     .option("checkpointLocation", f"{warehouse_path}/checkpoint/flights")
-#     .toTable("local.flight_stream.realtime_flights")
-# )
-
-# print("\n🚀 SPARK STREAMING TO ICEBERG STARTED SUCCESSFULLY")
-# print("📥 Kafka Topic: flights_live")
-# print("🧊 Iceberg Table: local.flight_stream.realtime_flights\n")
-
-# query.awaitTermination()
 import os
 import sys
 from pyspark.sql import SparkSession
@@ -209,11 +117,21 @@ print("✅ Iceberg table ready: local.flight_stream.realtime_flights")
 # =========================================
 # 5️⃣ WRITE STREAM TO ICEBERG
 # =========================================
+# query = (
+#     parsed_df
+#     .writeStream
+#     .format("iceberg")  # Explicitly state the format
+#     .outputMode("append")
+#     .option("checkpointLocation", checkpoint_path)
+#     .toTable("local.flight_stream.realtime_flights")
+# )
+
 query = (
     parsed_df
     .writeStream
-    .format("iceberg")  # Explicitly state the format
+    .format("iceberg")
     .outputMode("append")
+    .trigger(processingTime="5 seconds")  # <--- Add this Trigger
     .option("checkpointLocation", checkpoint_path)
     .toTable("local.flight_stream.realtime_flights")
 )
