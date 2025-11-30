@@ -1,0 +1,10 @@
+checkpoint_parquet/
+checkpoint/
+spark-warehouse/
+warehouse/
+.ivy2/
+.env
+.venv
+# Streamlit local files
+.streamlit/secrets.toml
+.streamlit/machine_id_v4

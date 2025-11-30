@@ -1,0 +1,8 @@
+pyspark==3.5.3
+pandas
+pyarrow
+kafka-python
+fastparquet
+streamlit
+matplotlib
+setuptools
