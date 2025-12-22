@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hdfs-dn-pvc
+  namespace: hdfs
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hdfs-datanode
+  namespace: hdfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hdfs-datanode
+  template:
+    metadata:
+      labels:
+        app: hdfs-datanode
+    spec:
+      containers:
+      - name: datanode
+        image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+        env:
+        - name: CORE_CONF_fs_defaultFS
+          value: "hdfs://hdfs-namenode-svc:9000"
+        volumeMounts:
+        - mountPath: /hadoop/dfs/data
+          name: dn-storage
+      volumes:
+      - name: dn-storage
+        persistentVolumeClaim:
+          claimName: hdfs-dn-pvc

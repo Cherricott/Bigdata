@@ -1,0 +1,32 @@
+# k8s/namespace-pv.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bigdata
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: bigdata-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /home/cherricott/bigdata-data
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: bigdata-pvc
+  namespace: bigdata
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+  volumeName: bigdata-pv
