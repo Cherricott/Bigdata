@@ -2,20 +2,22 @@ services:
   spark-app:
     build: .
     container_name: spark-iceberg-app
-    # user: "${UID}:${GID}"  <-- DISABLED: Causes crashes on /mnt drives
+    # user: "${UID}:${GID}"  
     volumes:
       - .:/app
-      - ./warehouse:/app/warehouse
-      - ./checkpoint_parquet:/app/checkpoint_parquet
+      # - ./warehouse:/app/warehouse
+      # - ./checkpoint_parquet:/app/checkpoint_parquet
       - ./data:/app/data
       - /app/.venv
     environment:
-      - SPARK_LOCAL_IP=127.0.0.1
+      - SPARK_LOCAL_IP=0.0.0.0
       - HOME=/app
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
     ports:
       - "8501:8501"
     depends_on:
       - kafka
+      - namenode
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
@@ -42,6 +44,7 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -54,3 +57,27 @@ services:
       - KAFKA_CLUSTERS_0_NAME=local
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
       - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    hostname: namenode
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    environment:
+      - CLUSTER_NAME=test
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    env_file:
+      - ./hadoop.env
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    environment:
+      - SERVICE_PRECONDITION=namenode:9870
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    env_file:
+      - ./hadoop.env
+    depends_on:
+      - namenode

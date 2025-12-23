@@ -1,0 +1,349 @@
+# # --- ZOOKEEPER ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: zookeeper
+# spec:
+#   ports:
+#   - port: 2181
+#   selector:
+#     app: zookeeper
+# ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: zookeeper
+# spec:
+#   selector:
+#     matchLabels:
+#       app: zookeeper
+#   template:
+#     metadata:
+#       labels:
+#         app: zookeeper
+#     spec:
+#       containers:
+#       - name: zookeeper
+#         image: confluentinc/cp-zookeeper:7.6.0
+#         env:
+#         - name: ZOOKEEPER_CLIENT_PORT
+#           value: "2181"
+#         - name: ZOOKEEPER_TICK_TIME
+#           value: "2000"
+#         - name: KAFKA_OPTS
+#           value: "-Xmx512M -Xms512M"
+# ---
+# # --- KAFKA ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: kafka
+# spec:
+#   ports:
+#   - port: 9092
+#   selector:
+#     app: kafka
+# ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: kafka
+# spec:
+#   selector:
+#     matchLabels:
+#       app: kafka
+#   template:
+#     metadata:
+#       labels:
+#         app: kafka
+#     spec:
+#       containers:
+#       - name: kafka
+#         image: confluentinc/cp-kafka:7.6.0
+#         ports:
+#         - containerPort: 9092
+#         # FIX: We override the start command to delete the confusing K8s variable
+#         command:
+#           - "sh"
+#           - "-c"
+#           - "unset KAFKA_PORT && /etc/confluent/docker/run"
+#         env:
+#         - name: KAFKA_BROKER_ID
+#           value: "1"
+#         - name: KAFKA_ZOOKEEPER_CONNECT
+#           value: "zookeeper:2181"
+#         - name: KAFKA_LISTENERS
+#           value: "PLAINTEXT://0.0.0.0:9092"
+#         - name: KAFKA_ADVERTISED_LISTENERS
+#           value: "PLAINTEXT://kafka:9092"
+#         - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+#           value: "PLAINTEXT:PLAINTEXT"
+#         - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+#           value: "1"
+#         - name: KAFKA_HEAP_OPTS
+#           value: "-Xmx1G -Xms1G"
+# ---
+# # --- NAMENODE ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: namenode
+# spec:
+#   ports:
+#   - port: 9000
+#   - port: 9870
+#   selector:
+#     app: namenode
+# ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: namenode
+# spec:
+#   selector:
+#     matchLabels:
+#       app: namenode
+#   template:
+#     metadata:
+#       labels:
+#         app: namenode
+#     spec:
+#       containers:
+#       - name: namenode
+#         image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+#         env:
+#         - name: CLUSTER_NAME
+#           value: "test"
+#         - name: CORE_CONF_fs_defaultFS
+#           value: "hdfs://namenode:9000"
+#         - name: HDFS_NAMENODE_OPTS
+#           value: "-Xmx2G"
+#         volumeMounts:
+#         - mountPath: /hadoop/dfs/name
+#           name: hdfs-disk
+#       volumes:
+#       - name: hdfs-disk
+#         persistentVolumeClaim:
+#           claimName: hdfs-storage
+# ---
+# # --- DATANODE ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: datanode
+# spec:
+#   selector:
+#     matchLabels:
+#       app: datanode
+#   template:
+#     metadata:
+#       labels:
+#         app: datanode
+#     spec:
+#       containers:
+#       - name: datanode
+#         image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+#         env:
+#         - name: SERVICE_PRECONDITION
+#           value: "namenode:9870"
+#         - name: CORE_CONF_fs_defaultFS
+#           value: "hdfs://namenode:9000"
+#         - name: HDFS_DATANODE_OPTS
+#           value: "-Xmx2G"
+
+# --- NAMENODE SERVICE (Moved to top to prevent errors) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: namenode
+spec:
+  ports:
+  - name: rpc
+    port: 9000
+    targetPort: 9000
+  - name: http
+    port: 9870
+    targetPort: 9870
+  selector:
+    app: namenode  # This MUST match the label in your NameNode Deployment
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hdfs-config
+data:
+  hdfs-site.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <configuration>
+      <property>
+        <name>dfs.namenode.rpc-bind-host</name>
+        <value>0.0.0.0</value>
+      </property>
+      <property>
+        <name>dfs.namenode.servicerpc-bind-host</name>
+        <value>0.0.0.0</value>
+      </property>
+      <property>
+        <name>dfs.namenode.rpc-address</name>
+        <value>namenode:9000</value>
+      </property>
+      <property>
+        <name>dfs.namenode.datanode.registration.ip-hostname-check</name>
+        <value>false</value>
+      </property>
+      <property>
+        <name>dfs.datanode.use.datanode.hostname</name>
+        <value>false</value>
+      </property>
+    </configuration>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: namenode
+spec:
+  selector:
+    matchLabels:
+      app: namenode
+  template:
+    metadata:
+      labels:
+        app: namenode
+    spec:
+      containers:
+      - name: namenode
+        image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+        env:
+        - name: CLUSTER_NAME
+          value: "test"
+        - name: CORE_CONF_fs_defaultFS
+          value: "hdfs://namenode:9000"
+        volumeMounts:
+        - mountPath: /hadoop/dfs/name
+          name: hdfs-disk
+        - mountPath: /etc/hadoop/hdfs-site.xml # 👈 This is the fix
+          name: hdfs-conf-vol
+          subPath: hdfs-site.xml
+      volumes:
+      - name: hdfs-disk
+        persistentVolumeClaim:
+          claimName: hdfs-storage
+      - name: hdfs-conf-vol
+        configMap:
+          name: hdfs-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: datanode
+spec:
+  selector:
+    matchLabels:
+      app: datanode
+  template:
+    metadata:
+      labels:
+        app: datanode
+    spec:
+      containers:
+      - name: datanode
+        image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+        env:
+        - name: SERVICE_PRECONDITION
+          value: "namenode:9870"
+        - name: CORE_CONF_fs_defaultFS
+          value: "hdfs://namenode:9000"
+        volumeMounts:
+        - mountPath: /etc/hadoop/hdfs-site.xml # 👈 This is the fix
+          name: hdfs-conf-vol
+          subPath: hdfs-site.xml
+      volumes:
+      - name: hdfs-conf-vol
+        configMap:
+          name: hdfs-config
+---
+# --- ZOOKEEPER ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+spec:
+  ports:
+  - port: 2181
+  selector:
+    app: zookeeper
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+spec:
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+      - name: zookeeper
+        image: confluentinc/cp-zookeeper:7.6.0
+        env:
+        - name: ZOOKEEPER_CLIENT_PORT
+          value: "2181"
+        - name: ZOOKEEPER_TICK_TIME
+          value: "2000"
+---
+# --- KAFKA ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+spec:
+  ports:
+  - name: external
+    port: 9092
+    targetPort: 9092  # This is where your port-forward hits
+  - name: internal
+    port: 29092
+    targetPort: 29092 # This is where Spark hits
+  selector:
+    app: kafka
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+spec:
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+      - name: kafka
+        image: confluentinc/cp-kafka:7.6.0
+        command:
+          - "sh"
+          - "-c"
+          - "unset KAFKA_PORT && /etc/confluent/docker/run"
+        env:
+        - name: KAFKA_BROKER_ID
+          value: "1"
+        - name: KAFKA_ZOOKEEPER_CONNECT
+          value: "zookeeper:2181"
+        # Dual-listener setup so both Spark and your Laptop work
+        - name: KAFKA_LISTENERS
+          value: "INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092"
+        - name: KAFKA_ADVERTISED_LISTENERS
+          value: "INTERNAL://kafka:29092,EXTERNAL://localhost:9092"
+        - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+        - name: KAFKA_INTER_BROKER_LISTENER_NAME
+          value: "INTERNAL"
+        - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "1"

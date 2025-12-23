@@ -1,0 +1,170 @@
+# # --- SPARK MASTER ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: spark-master
+# spec:
+#   ports:
+#   - port: 7077
+#     name: spark
+#   - port: 8080
+#     name: ui
+#   selector:
+#     app: spark-master
+# ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: spark-master
+# spec:
+#   selector:
+#     matchLabels:
+#       app: spark-master
+#   template:
+#     metadata:
+#       labels:
+#         app: spark-master
+#     spec:
+#       containers:
+#       - name: spark-master
+#         image: localhost:5001/spark-iceberg-app:latest
+#         # FIX: Explicit command to ensure foreground execution
+#         command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+#         env:
+#         # FIX: Override K8s service variable to prevent "tcp://..." crash
+#         - name: SPARK_MASTER_PORT
+#           value: "7077"
+#         - name: SPARK_MASTER_WEBUI_PORT
+#           value: "8080"
+#         ports:
+#         - containerPort: 7077
+#         - containerPort: 8080
+# ---
+# # --- SPARK WORKER ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: spark-worker
+# spec:
+#   replicas: 2
+#   selector:
+#     matchLabels:
+#       app: spark-worker
+#   template:
+#     metadata:
+#       labels:
+#         app: spark-worker
+#     spec:
+#       containers:
+#       - name: spark-worker
+#         image: localhost:5001/spark-iceberg-app:latest
+#         command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+#         env:
+#         - name: SPARK_WORKER_CORES
+#           value: "1"
+#         - name: SPARK_WORKER_MEMORY
+#           value: "1G"
+# ---
+# # --- SPARK CLIENT ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: spark-client
+# spec:
+#   replicas: 1
+#   selector:
+#     matchLabels:
+#       app: spark-client
+#   template:
+#     metadata:
+#       labels:
+#         app: spark-client
+#     spec:
+#       containers:
+#       - name: spark-client
+#         image: localhost:5001/spark-iceberg-app:latest
+#         command: ["/bin/sh"]
+#         args: ["-c", "while true; do sleep 1000; done"]
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-master
+spec:
+  ports:
+  - port: 7077
+    name: spark
+  - port: 8080
+    name: ui
+  selector:
+    app: spark-master
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-master
+spec:
+  selector:
+    matchLabels:
+      app: spark-master
+  template:
+    metadata:
+      labels:
+        app: spark-master
+    spec:
+      containers:
+      - name: spark-master
+        image: localhost:5001/spark-iceberg-app:latest
+        command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+        env:
+        - name: SPARK_MASTER_PORT
+          value: "7077"
+        - name: SPARK_MASTER_WEBUI_PORT
+          value: "8080"
+        ports:
+        - containerPort: 7077
+        - containerPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: spark-worker
+  template:
+    metadata:
+      labels:
+        app: spark-worker
+    spec:
+      containers:
+      - name: spark-worker
+        image: localhost:5001/spark-iceberg-app:latest
+        command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+        env:
+        - name: SPARK_WORKER_CORES
+          value: "1"
+        - name: SPARK_WORKER_MEMORY
+          value: "1G"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-client
+  template:
+    metadata:
+      labels:
+        app: spark-client
+    spec:
+      containers:
+      - name: spark-client
+        image: localhost:5001/spark-iceberg-app:latest
+        command: ["/bin/sh"]
+        args: ["-c", "while true; do sleep 1000; done"]

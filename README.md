@@ -19,44 +19,39 @@ Currenty handle only 7 columns and 6 months of data for ease of testing:
     USING ICEBERG
     """)
 
+
+# Turn off your firewall and any VPNs
+
 # Initial setup
 
-**For Linux/Mac Users:**
+To run on K8s, first run this commmand:
 
-Run this in your terminal:
-
-    echo "UID=$(id -u)" > .env
-    echo "GID=$(id -g)" >> .env
-
-**For Windows:**
-
-Create a file named `.env` and paste this inside:
-
-    UID=1000
-    GID=1000
-
-To run on Docker, first run this commmand:
-
-    docker compose build --no-cache
-
-    docker compose up -d
-
-Then check if it is actually running:
-
-    docker ps
-
-# Run the Batch Layer (History)
-
-Goal: Load the historical CSV data into the history_flights Iceberg table. You only need to run this once.
-
-    docker compose exec spark-app python batch_etl.py
+    ./setup-registry.sh
 
 
-Note: currently batch_etl.py works for small ammount of data, for large ammount of data, try batch_etl_large.py
+Then :
 
-For Batch analysis, run this:
+    docker build -t localhost:5001/spark-iceberg-app:latest .
 
-    docker compose exec spark-app python batch_analysis.py
+    docker push localhost:5001/spark-iceberg-app:latest
+
+And:
+
+    kubectl apply -f 01-storage.yaml
+
+    kubectl apply -f 02-infra.yaml
+
+    kubectl apply -f 03-spark-cluster.yaml 
+
+
+# Upload Raw Data, Batch Ingestion and Batch analysis
+
+Goal: Move CSVs into the distributed file system. You only need to run this once.
+
+     ./start_batch.sh
+
+
+Note: currently  works for small ammount of data
 
 Currently batch analysis do:
 
@@ -66,29 +61,30 @@ Currently batch analysis do:
 
         Route Quality: Calculates the average delay for every Route (Origin → Dest), filtering out rare routes with fewer than 50 flights.
 
-    Output: It saves two optimized "Gold" tables to Iceberg:
 
-        local.flight_stream.airline_stats
+# Real-Time Streaming (Kafka → Iceberg)
+    
+This requires two terminals.
 
-        local.flight_stream.route_stats
+Terminal 1 (The Producer - Simulated Planes):
 
-# Run the Speed Layer (Real-Time)
+    ./start_producer.sh
 
-Next run this command to simulate "live" data stream (run it in its own terminal and keep the terminal running):
+(Leave this running. It creates the topic and sends data).
 
-    docker compose exec spark-app python producer.py
+Terminal 2 (The Consumer - Spark Streaming):
 
-In an new terminal, run this command to get the data into warehouse:
+    ./start_streaming.sh
 
-    docker compose exec spark-app python sparkstreaming.py
+(Leave this running).
 
-Check Data Flow: Go to http://localhost:8888 -> Topics -> flights_live -> Messages. (You should see data).
+# Dashboard:
 
-# Run the Serving Layer (Dashboard)
+Open a third terminal to run:
 
-Open a third terminal and run:
+Terminal 3 (The Dashboard):
 
-    docker compose exec spark-app streamlit run dashboard.py
+    ./start_dashboard.sh
 
 Currently show:
 
@@ -120,20 +116,40 @@ Currently show:
 
             "Worst Routes": A list of the specific flight paths (e.g., JFK to LAX) that are chronically late.
 
-# To stop the code:
+# STOP CUSTER
 
-Go to the terminal for producer.py and press Ctrl + C
+Make sure to do Ctrl + C in all open terminal then
 
-Then to the terminal for sparkstreaming.py and press Ctrl + C
+First run:
 
-Do the same for dashboard.py
+    ./stop_all.sh
 
-Finally open a new terminal and run
+Then
 
-    docker compose down
+    docker stop $(docker ps -q --filter name=bigdata-cluster)
 
-Run this to confirm
+# START CLUSTER
 
-    docker ps
+First run:
 
-If the table is empty (only header), then you have stopped.
+    docker start $(docker ps -a -q --filter name=bigdata-cluster)
+
+Then you can run the producer, streaming and dashboard
+
+# Factory reset:
+
+Make sure to do Ctrl + C in all open terminal then
+
+    ./stop_all.sh
+
+    # 1. Destroy the Kubernetes Cluster (Wipes all Pods, PVCs, and HDFS data)
+    kind delete cluster --name bigdata-cluster
+
+    # 2. Kill the local Docker Registry (Wipes the stored images)
+    docker rm -f kind-registry
+
+    # 3. Clean the Docker Network (Wipes the bridge between Registry and Kind)
+    docker network prune -f
+
+    # 4. Deep clean Docker cache (Optional: Wipes downloaded layers/images)
+    docker system prune -a --volumes -f

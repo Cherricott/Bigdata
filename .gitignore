@@ -8,3 +8,6 @@ warehouse/
 # Streamlit local files
 .streamlit/secrets.toml
 .streamlit/machine_id_v4
+.bash_history
+.python_history
+*.log

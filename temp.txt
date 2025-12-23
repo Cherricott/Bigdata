@@ -1,0 +1,32 @@
+ ./setup-registry.sh
+
+
+docker build -t localhost:5001/spark-iceberg-app:latest .
+
+docker push localhost:5001/spark-iceberg-app:latest
+
+
+kubectl apply -f 01-storage.yaml
+
+kubectl apply -f 02-infra.yaml
+
+kubectl apply -f 03-spark-cluster.yaml 
+
+
+# 1. Destroy the Kubernetes Cluster (Wipes all Pods, PVCs, and HDFS data)
+kind delete cluster --name bigdata-cluster
+
+# 2. Kill the local Docker Registry (Wipes the stored images)
+docker rm -f kind-registry
+
+# 3. Clean the Docker Network (Wipes the bridge between Registry and Kind)
+docker network prune -f
+
+# 4. Deep clean Docker cache (Optional: Wipes downloaded layers/images)
+docker system prune -a --volumes -f
+
+# STOP CUSTER
+docker stop $(docker ps -q --filter name=bigdata-cluster)
+
+# START CLUSTER
+docker start $(docker ps -a -q --filter name=bigdata-cluster)
