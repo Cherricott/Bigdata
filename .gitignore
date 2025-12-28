@@ -11,3 +11,7 @@ warehouse/
 .bash_history
 .python_history
 *.log
+
+data
+data/
+hadoop_data

@@ -10,11 +10,22 @@ if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true
     registry:2
 fi
 
-# 2. Create kind cluster
-echo "Creating cluster..."
+# 2. Create kind cluster with Host Mounting
+echo "Creating cluster with Persistence Bridge..."
+
+# Create the local folders on your computer first
+mkdir -p $(pwd)/hadoop_data/namenode
+
 kind create cluster --name bigdata-cluster --config=- <<EOF
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  # 🛡️ THE PERSISTENCE BRIDGE:
+  # This maps your computer's folder to a path inside the Kind Node.
+  extraMounts:
+  - hostPath: $(pwd)/hadoop_data/namenode
+    containerPath: /mnt/hdfs-data
 containerdConfigPatches:
 - |-
   [plugins."io.containerd.grpc.v1.cri".registry]

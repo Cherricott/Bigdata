@@ -1,155 +1,139 @@
 # Bigdata
+
 Big data project for class 161703
 
+## Note: Turn off your firewall and any VPNs.
 
-# Note:
+# Initial Setup
 
-Currenty handle only 7 columns and 6 months of data for ease of testing:
+## Make scripts executable:
 
-    spark.sql("""
-    CREATE TABLE IF NOT EXISTS local.flight_stream.realtime_flights (
-        FL_DATE DATE,
-        OP_UNIQUE_CARRIER STRING,
-        ORIGIN STRING,
-        DEST STRING,
-        DEP_DELAY DOUBLE,
-        ARR_DELAY DOUBLE,
-        CANCELLED DOUBLE 
-    )
-    USING ICEBERG
-    """)
+    chmod +x *.sh
 
+## CRITICAL: Prepare Local Storage We must create the data folders manually with open permissions before starting. This prevents "Permission Denied" errors if the folders were previously owned by Root.
 
-# Turn off your firewall and any VPNs
+    # 1. Create the directories
+    mkdir -p ./hadoop_data/namenode/namenode-metadata
+    mkdir -p ./hadoop_data/namenode/datanode-data
 
-# Initial setup
+    # 2. Grant open access (Fixes the "Root Lock" issue)
+    chmod -R 777 ./hadoop_data
 
-To run on K8s, first run this commmand:
+## Setup Registry:
 
     ./setup-registry.sh
 
-
-Then :
+## Build & Push Images:
 
     docker build -t localhost:5001/spark-iceberg-app:latest .
-
     docker push localhost:5001/spark-iceberg-app:latest
 
-And:
+## Start storage:
 
     kubectl apply -f 01-storage.yaml
 
-    kubectl apply -f 02-infra.yaml
+## Start the Infrastructure: We use a specialized script that formats the NameNode and ensures the DataNode connects correctly without crashing.
+
+    ./setup_infra.sh
+
+## Start Spark Cluster:
 
     kubectl apply -f 03-spark-cluster.yaml 
 
+Wait 60 Seconds, then you can continue.
 
-# Upload Raw Data, Batch Ingestion and Batch analysis
+# Upload Raw Data, Batch Ingestion and Batch Analysis
 
-Goal: Move CSVs into the distributed file system. You only need to run this once.
+Goal: Move CSVs into the distributed file system. You only need to run this once. The data will persist on your hard drive even if you stop the cluster.
 
-     ./start_batch.sh
+    ./start_batch.sh
 
+What this does:
 
-Note: currently  works for small ammount of data
+    Ingestion: Uploads local CSV data to HDFS and creates Iceberg tables.
 
-Currently batch analysis do:
+    Airline Performance: Calculates the average delay and cancellation rate for every airline.
 
-    Action: It runs complex aggregations that would be too slow to run live on a dashboard.
-
-        Airline Performance: Calculates the average delay and cancellation rate for every airline in the .csv files.
-
-        Route Quality: Calculates the average delay for every Route (Origin → Dest), filtering out rare routes with fewer than 50 flights.
-
+    Route Quality: Calculates average delay for every Route (Origin → Dest).
 
 # Real-Time Streaming (Kafka → Iceberg)
-    
+
 This requires two terminals.
 
 Terminal 1 (The Producer - Simulated Planes):
-
-    ./start_producer.sh
-
-(Leave this running. It creates the topic and sends data).
-
-Terminal 2 (The Consumer - Spark Streaming):
 
     ./start_streaming.sh
 
 (Leave this running).
 
-# Dashboard:
+Terminal 2 (The Consumer - Spark Streaming):
 
-Open a third terminal to run:
+    ./start_producer.sh
+
+(Leave this running. It creates the topic and sends data).
+Dashboard
+
+# Open a third terminal to run the Dashboard:
 
 Terminal 3 (The Dashboard):
 
     ./start_dashboard.sh
 
-Currently show:
+Tabs:
 
-    Tab 1: Real-Time Speed Layer (The "Now")
+    Real-Time Speed Layer (The "Now"):
 
-        Source: Reads local.flight_stream.realtime_flights.
+        Refreshes every 10 seconds.
 
-        Behavior: It refreshes every 2 seconds.
+        Shows live flight counters and delay spikes.
 
-        Visuals:
+    Historical Batch Layer (The "Past"):
 
-            Total Counter: Ticks up live as your Producer generates fake flights.
+        Reads the "Gold" tables created by the batch script.
 
-            Live Bar Chart: Shows which airline is suffering delays right this second.
+        Shows "All-Time" worst airlines and routes based on historical data.
 
-            Raw Feed: Shows the last 10 flights that entered the system.
+# STOP CLUSTER (Safe Pause)
 
-    Tab 2: Historical Batch Layer (The "Past")
+To stop the cluster without losing your data:
 
-        Source: Reads the Gold tables (airline_stats & route_stats) created by the batch script above.
+Ctrl + C in all open terminals.
 
-        Behavior: It caches this data (loads it once) because history doesn't change every second.
-
-        Visuals:
-
-            "All-Time" Worst Airlines: Based on 7 years of data.
-
-            "Most Cancelled" Airlines: Who cancels the most flights historically?
-
-            "Worst Routes": A list of the specific flight paths (e.g., JFK to LAX) that are chronically late.
-
-# STOP CUSTER
-
-Make sure to do Ctrl + C in all open terminal then
-
-First run:
+Run the stop script (Saves HDFS state to disk):
 
     ./stop_all.sh
 
-Then
+Stop the containers:
 
     docker stop $(docker ps -q --filter name=bigdata-cluster)
 
-# START CLUSTER
-
-First run:
+## To Resume:
 
     docker start $(docker ps -a -q --filter name=bigdata-cluster)
 
-Then you can run the producer, streaming and dashboard
+Wait 60 seconds, then run the dashboard/streaming scripts again.
 
-# Factory reset:
+# FACTORY RESET (Nuclear Option)
 
-Make sure to do Ctrl + C in all open terminal then
+Use this to wipe everything clean. After running this, go back to Step 1 (Initial Setup) to start over.
+
+
+Kill Background Processes:
 
     ./stop_all.sh
 
-    # 1. Destroy the Kubernetes Cluster (Wipes all Pods, PVCs, and HDFS data)
+Destroy the Cluster & Registry:
+
     kind delete cluster --name bigdata-cluster
-
-    # 2. Kill the local Docker Registry (Wipes the stored images)
     docker rm -f kind-registry
-
-    # 3. Clean the Docker Network (Wipes the bridge between Registry and Kind)
     docker network prune -f
 
-    # 4. Deep clean Docker cache (Optional: Wipes downloaded layers/images)
+
+Wipe Local Data: We delete the folder completely. The "Initial Setup" section above will handle recreating it correctly.
+
+    sudo rm -rf ./hadoop_data
+
+
+Clean Docker Cache:
+
     docker system prune -a --volumes -f

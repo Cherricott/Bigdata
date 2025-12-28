@@ -1,128 +1,132 @@
-# import os
-# from pyspark.sql import SparkSession
-
-# # Initialize Spark
-# spark = SparkSession.builder \
-#     .appName("HDFS_Data_Uploader") \
-#     .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:9000") \
-#     .getOrCreate()
-
-# # Define the years you want to upload (matching your friend's logic)
-# years = range(2018, 2026)
-
-# print("🚀 Starting Data Upload to HDFS...")
-
-# for yr in years:
-#     # 1. Source: Local Path (inside the container)
-#     # We use "file://" to force Spark to look at the container's local disk
-#     local_path = f"file:///app/data/{yr}"
-    
-#     # 2. Destination: HDFS Path
-#     hdfs_path = f"hdfs://namenode:9000/data/raw/{yr}"
-
-#     # Check if local folder exists before trying to read
-#     if not os.path.exists(f"/app/data/{yr}"):
-#         print(f"⚠️  Skipping {yr}: Folder not found in /app/data/")
-#         continue
-
-#     try:
-#         print(f"   📂 Reading from: {local_path}")
-        
-#         # Read Local CSVs
-#         df = spark.read.option("header", "true").csv(local_path)
-        
-#         # Write to HDFS
-#         # Spark writes data as a folder of part-files, which is perfect for HDFS
-#         df.write.mode("overwrite").option("header", "true").csv(hdfs_path)
-        
-#         print(f"   ✅ {yr} uploaded to HDFS successfully!")
-        
-#     except Exception as e:
-#         print(f"   ❌ Error uploading {yr}: {e}")
-
-# print("🎉 Upload Complete!")
-# spark.stop()
-
 import os
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, to_date
+from pyspark.sql.functions import col, to_date, month
 
-# 1. Initialize Spark with Iceberg and HDFS configs
+# --- OPTIMIZED SPARK SESSION FOR 4Gi POD LIMITS ---
 spark = (SparkSession.builder
-    .appName("HDFS_Iceberg_7Col_Upload")
+    .appName("HDFS_Iceberg_Month_By_Month_Upload")
     .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
     .config("spark.sql.catalog.local", "org.apache.iceberg.spark.SparkCatalog")
     .config("spark.sql.catalog.local.type", "hadoop")
     .config("spark.sql.catalog.local.warehouse", "hdfs://namenode:9000/warehouse")
     .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:9000")
+    
+    # --- CRITICAL MEMORY FIXES ---
+    .config("spark.driver.memory", "2g")
+    .config("spark.executor.memory", "2g")
+    # Low partitions to minimize concurrent Parquet writers
+    .config("spark.sql.shuffle.partitions", "2") 
+    # Disable Fanout to force sequential writing
+    .config("spark.sql.iceberg.fanout-enabled", "false")
     .getOrCreate())
 
-# =========================================================================
-# 🆕 CRITICAL BLOCK: INITIALIZE INFRASTRUCTURE
-# This ensures the database and table exist after an HDFS wipe.
-# =========================================================================
-print("🛠️  Initializing Iceberg Catalog and Table...")
-spark.sql("CREATE NAMESPACE IF NOT EXISTS local.flight_stream")
+spark.sparkContext.setLogLevel("WARN")
 
+# 1. Initialize Schema
+spark.sql("CREATE NAMESPACE IF NOT EXISTS local.flight_stream")
 spark.sql("""
 CREATE TABLE IF NOT EXISTS local.flight_stream.history_flights (
     FL_DATE DATE,
     OP_UNIQUE_CARRIER STRING,
+    TAIL_NUM STRING,
+    OP_CARRIER_FL_NUM STRING,
     ORIGIN STRING,
+    ORIGIN_CITY_NAME STRING,
     DEST STRING,
+    DEST_CITY_NAME STRING,
+    DEP_TIME DOUBLE,
     DEP_DELAY DOUBLE,
+    TAXI_OUT DOUBLE,
+    WHEELS_OFF DOUBLE,
+    WHEELS_ON DOUBLE,
+    TAXI_IN DOUBLE,
+    ARR_TIME DOUBLE,
     ARR_DELAY DOUBLE,
-    CANCELLED DOUBLE
+    CANCELLED INT,
+    CANCELLATION_CODE STRING,
+    DIVERTED INT,
+    AIR_TIME DOUBLE,
+    DISTANCE DOUBLE,
+    CARRIER_DELAY DOUBLE,
+    WEATHER_DELAY DOUBLE,
+    NAS_DELAY DOUBLE,
+    SECURITY_DELAY DOUBLE,
+    LATE_AIRCRAFT_DELAY DOUBLE
 )
 USING ICEBERG
-PARTITIONED BY (years(FL_DATE))
+PARTITIONED BY (days(FL_DATE))
 """)
-# =========================================================================
 
 TABLE_NAME = "local.flight_stream.history_flights"
 years = range(2018, 2026)
 
-# The exact 7 columns matching the schema above
-TARGET_COLUMNS = [
-    "FL_DATE", "OP_UNIQUE_CARRIER", "ORIGIN", "DEST", 
-    "DEP_DELAY", "ARR_DELAY", "CANCELLED"
-]
-
-print(f"🚀 Starting Column-Aligned Upload to: {TABLE_NAME}")
-
 for yr in years:
     local_path = f"/app/data/{yr}" 
-    
-    if not os.path.exists(local_path):
-        continue
+    if not os.path.exists(local_path): continue
 
     try:
-        print(f"    📂 Processing Year {yr}...")
-        
-        # Read Local CSV
+        print(f"📂 Preparing Year {yr}...")
         raw_df = spark.read.option("header", "true").csv(f"file://{local_path}/*.csv")
         
-        # SELECT, CAST, and FORMAT DATE
-        df_aligned = raw_df.select(
+        # Prepare the full year dataframe (Lazy evaluation)
+        df_year = raw_df.select(
             to_date(col("FL_DATE"), "M/d/yyyy h:mm:ss a").alias("FL_DATE"),
             col("OP_UNIQUE_CARRIER").cast("string"),
+            col("TAIL_NUM").cast("string"),
+            col("OP_CARRIER_FL_NUM").cast("string"),
             col("ORIGIN").cast("string"),
+            col("ORIGIN_CITY_NAME").cast("string"),
             col("DEST").cast("string"),
+            col("DEST_CITY_NAME").cast("string"),
+            col("DEP_TIME").cast("double"),
             col("DEP_DELAY").cast("double"),
+            col("TAXI_OUT").cast("double"),
+            col("WHEELS_OFF").cast("double"),
+            col("WHEELS_ON").cast("double"),
+            col("TAXI_IN").cast("double"),
+            col("ARR_TIME").cast("double"),
             col("ARR_DELAY").cast("double"),
-            col("CANCELLED").cast("double")
-        )
-        
-        # Filter out rows with unparseable dates
-        df_final = df_aligned.filter(col("FL_DATE").isNotNull())
+            col("CANCELLED").cast("double"), 
+            col("CANCELLATION_CODE").cast("string"),
+            col("DIVERTED").cast("double"),
+            col("AIR_TIME").cast("double"),
+            col("DISTANCE").cast("double"),
+            col("CARRIER_DELAY").cast("double"),
+            col("WEATHER_DELAY").cast("double"),
+            col("NAS_DELAY").cast("double"),
+            col("SECURITY_DELAY").cast("double"),
+            col("LATE_AIRCRAFT_DELAY").cast("double")
+        ).fillna(0, subset=["CANCELLED", "DIVERTED"]) \
+         .withColumn("CANCELLED", col("CANCELLED").cast("int")) \
+         .withColumn("DIVERTED", col("DIVERTED").cast("int")) \
+         .filter(col("FL_DATE").isNotNull())
 
-        # Now .append() will work because the table was created above
-        df_final.writeTo(TABLE_NAME).append()
-        
-        print(f"    ✅ Year {yr} successfully merged into Iceberg table!")
+        # --- SLOW UPLOAD: Process Month by Month ---
+        for m in range(1, 13):
+            print(f"  🗓️ Processing {yr}-{m:02d}...")
+            
+            # Filter for just this month
+            df_month = df_year.filter(month(col("FL_DATE")) == m)
+            
+            # Check if there is data for this month before trying to write
+            if df_month.take(1):
+                # Repartition and Sort for maximum memory protection
+                df_month = df_month.repartition(2, "FL_DATE").sortWithinPartitions("FL_DATE")
+
+                # Write the month chunk
+                df_month.writeTo(TABLE_NAME) \
+                    .option("write.parquet.row-group-size-bytes", "67108864") \
+                    .option("write.parquet.page-size-bytes", "1048576") \
+                    .append()
+                
+                print(f"  ✅ {yr}-{m:02d} uploaded.")
+            
+            # Clear cache/metadata after every month
+            spark.catalog.clearCache()
+            
+        print(f"🏁 Year {yr} Complete.")
         
     except Exception as e:
-        print(f"    ❌ Error processing {yr}: {e}")
+        print(f"❌ Error processing {yr}: {e}")
 
-print("🎉 DONE! Historical data and Stream data are now unified in Iceberg.")
 spark.stop()

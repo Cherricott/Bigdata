@@ -30,3 +30,31 @@ docker stop $(docker ps -q --filter name=bigdata-cluster)
 
 # START CLUSTER
 docker start $(docker ps -a -q --filter name=bigdata-cluster)
+
+# 1. Identify Pod
+SPARK_POD=$(kubectl get pods -l app=spark-client -o jsonpath='{.items[0].metadata.name}')
+
+# 2. Kill any existing Streamlit processes inside the pod
+kubectl exec $SPARK_POD -- pkill -f streamlit
+
+# 3. Re-run your launch script
+./start_dashboard.sh
+
+
+# Check the tables
+# 1. Dynamically get the Spark Pod name
+SPARK_POD=$(kubectl get pods -l app=spark-client -o jsonpath='{.items[0].metadata.name}')
+
+# 2. Check for the existence of your Analysis Tables (Gold Layer)
+echo "🔍 Checking for Gold Tables in HDFS..."
+kubectl exec $SPARK_POD -- spark-sql \
+  --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1 \
+  --conf "spark.sql.catalog.local=org.apache.iceberg.spark.SparkCatalog" \
+  --conf "spark.sql.catalog.local.type=hadoop" \
+  --conf "spark.sql.catalog.local.warehouse=hdfs://namenode:9000/warehouse" \
+  -e "SHOW TABLES IN local.flight_stream"
+
+
+
+
+kubectl describe pod $(kubectl get pods -l app=spark-client -o jsonpath='{.items[0].metadata.name}') 
